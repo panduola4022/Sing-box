@@ -306,40 +306,41 @@ generate_links() {
   get_name() { if [ "$HOSTNAME" = "s1.ct8.pl" ]; then SERVER="CT8"; else SERVER=$(echo "$HOSTNAME" | cut -d '.' -f 1); fi; echo "$SERVER"; }
   NAME=${isp}-$(get_name)-vmess-argo-${USERNAME}
   
-  # 修正文件路径处理
-  FILE_PATH="/usr/home/${USERNAME}/domains/${USERNAME}.serv00.net/public_html"
+  # 修正为serv00官方web目录路径
+  SERV00_WEBROOT="/usr/home/${USERNAME}/public_html"
+  FALLBACK_PATH="/usr/home/${USERNAME}/tmp"
   
-  # 确保目标目录存在并具有正确权限
-  mkdir -p "${FILE_PATH}" || {
-    echo "无法创建目录 ${FILE_PATH}，检查父目录权限"
-    exit 1
-  }
-  
-  # 验证目录可写性
-  if [ ! -w "${FILE_PATH}" ]; then
-    echo "错误：目录 ${FILE_PATH} 不可写，尝试修复权限..."
-    chmod 755 "${FILE_PATH}" 2>/dev/null || {
-      echo "权限修复失败，尝试使用备用路径"
-      # 回退到用户主目录
-      ALT_PATH="/usr/home/${USERNAME}/tmp_vmess"
-      mkdir -p "${ALT_PATH}"
-      FILE_PATH="${ALT_PATH}"
-    }
+  # 自动检测有效web目录
+  if [ -d "${SERV00_WEBROOT}" ] && [ -w "${SERV00_WEBROOT}" ]; then
+    FILE_PATH="${SERV00_WEBROOT}"
+  else
+    echo -e "\e[31m检测到标准web目录不可用，使用备用路径\e[0m"
+    mkdir -p "${FALLBACK_PATH}"
+    FILE_PATH="${FALLBACK_PATH}"
   fi
 
-  # 生成临时文件避免直接覆盖
-  TEMP_FILE=$(mktemp)
+  # 生成临时文件
+  TEMP_FILE=$(mktemp -p "${FILE_PATH}" 2>/dev/null || mktemp)
   cat > "${TEMP_FILE}" <<EOF
 vmess://$(echo "{ \"v\": \"2\", \"ps\": \"${NAME}\", \"add\": \"${CFIP}\", \"port\": \"${CFPORT}\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"auto\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${argodomain}\", \"path\": \"vmess-argo?ed=2048\", \"tls\": \"tls\", \"sni\": \"${argodomain}\", \"alpn\": \"\" }" | base64 -w0)
 EOF
 
-  # 移动文件到目标位置
-  mv "${TEMP_FILE}" "${FILE_PATH}/${SUB_TOKEN}_vmess.log" || {
-    echo "文件移动失败，检查目标位置权限"
-    exit 1
+  # 移动文件并设置权限
+  OUTPUT_FILE="${FILE_PATH}/${SUB_TOKEN}_vmess.log"
+  mv "${TEMP_FILE}" "${OUTPUT_FILE}" || {
+    echo -e "\e[31m文件写入失败，尝试直接保存...\e[0m"
+    cat "${TEMP_FILE}" > "${OUTPUT_FILE}"
   }
-  
-  cat ${FILE_PATH}/${SUB_TOKEN}_vmess.log
+  chmod 644 "${OUTPUT_FILE}"
+
+  # 生成访问链接
+  if [ "${FILE_PATH}" = "${SERV00_WEBROOT}" ]; then
+    ACCESS_URL="https://${USERNAME}.serv00.net/${SUB_TOKEN}_vmess.log"
+  else
+    ACCESS_URL="[备用路径] file://${OUTPUT_FILE}"
+  fi
+
+  cat "${OUTPUT_FILE}"
   green "\n订阅连接: https://${USERNAME}.serv00.net/${SUB_TOKEN}_vmess.log 适用于V2ranN/Nekobox/Karing/小火箭/sterisand/Loon 等\n" 
   rm -rf config.json fake_useragent_0.2.0.json ${WORKDIR}/boot.log ${WORKDIR}/tunnel.json ${WORKDIR}/tunnel.yml 
   install_keepalive
