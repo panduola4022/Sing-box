@@ -305,32 +305,39 @@ generate_links() {
   isp=$(curl -s --max-time 2 https://speed.cloudflare.com/meta | awk -F\" '{print $26}' | sed -e 's/ /_/g' || echo "00")
   get_name() { if [ "$HOSTNAME" = "s1.ct8.pl" ]; then SERVER="CT8"; else SERVER=$(echo "$HOSTNAME" | cut -d '.' -f 1); fi; echo "$SERVER"; }
   NAME=${isp}-$(get_name)-vmess-argo-${USERNAME}
-  FILE_PATH="${HOME}/domains/${USERNAME}.serv00.net/public_html"
-
-  # 验证目录权限
-  if [ ! -w "${HOME}/domains" ]; then
-    echo -e "\e[31m错误：缺少目录权限\e[0m" >&2
-    echo -e "请执行以下命令创建目录："
-    echo -e "  mkdir -p ${HOME}/domains/${USERNAME}.serv00.net/public_html"
-    echo -e "  chmod 755 ${HOME}/domains && chmod 755 ${HOME}/domains/${USERNAME}.serv00.net"
-    return 1
-  fi
-
-  # 创建目标目录（使用 -p 防止层级缺失）
-  mkdir -p "$file_path" || {
-    echo -e "\e[31m无法创建目录: $file_path\e[0m" >&2
-    return 1
+  
+  # 修正文件路径处理
+  FILE_PATH="/usr/home/${USERNAME}/domains/${USERNAME}.serv00.net/public_html"
+  
+  # 确保目标目录存在并具有正确权限
+  mkdir -p "${FILE_PATH}" || {
+    echo "无法创建目录 ${FILE_PATH}，检查父目录权限"
+    exit 1
   }
   
-  cat > ${FILE_PATH}/${SUB_TOKEN}_vmess.log <<EOF
+  # 验证目录可写性
+  if [ ! -w "${FILE_PATH}" ]; then
+    echo "错误：目录 ${FILE_PATH} 不可写，尝试修复权限..."
+    chmod 755 "${FILE_PATH}" 2>/dev/null || {
+      echo "权限修复失败，尝试使用备用路径"
+      # 回退到用户主目录
+      ALT_PATH="/usr/home/${USERNAME}/tmp_vmess"
+      mkdir -p "${ALT_PATH}"
+      FILE_PATH="${ALT_PATH}"
+    }
+  fi
+
+  # 生成临时文件避免直接覆盖
+  TEMP_FILE=$(mktemp)
+  cat > "${TEMP_FILE}" <<EOF
 vmess://$(echo "{ \"v\": \"2\", \"ps\": \"${NAME}\", \"add\": \"${CFIP}\", \"port\": \"${CFPORT}\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"auto\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${argodomain}\", \"path\": \"vmess-argo?ed=2048\", \"tls\": \"tls\", \"sni\": \"${argodomain}\", \"alpn\": \"\" }" | base64 -w0)
 EOF
 
-  # 检查文件是否成功写入
-  if [ ! -f "${FILE_PATH}/${SUB_TOKEN}_vmess.log" ]; then
-    echo "Error: Failed to write to ${FILE_PATH}/${SUB_TOKEN}_vmess.log."
-    return 1
-  fi
+  # 移动文件到目标位置
+  mv "${TEMP_FILE}" "${FILE_PATH}/${SUB_TOKEN}_vmess.log" || {
+    echo "文件移动失败，检查目标位置权限"
+    exit 1
+  }
   
   cat ${FILE_PATH}/${SUB_TOKEN}_vmess.log
   green "\n订阅连接: https://${USERNAME}.serv00.net/${SUB_TOKEN}_vmess.log 适用于V2ranN/Nekobox/Karing/小火箭/sterisand/Loon 等\n" 
