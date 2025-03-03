@@ -305,16 +305,9 @@ generate_links() {
   isp=$(curl -s --max-time 2 https://speed.cloudflare.com/meta | awk -F\" '{print $26}' | sed -e 's/ /_/g' || echo "00")
   get_name() { if [ "$HOSTNAME" = "s1.ct8.pl" ]; then SERVER="CT8"; else SERVER=$(echo "$HOSTNAME" | cut -d '.' -f 1); fi; echo "$SERVER"; }
   NAME=${isp}-$(get_name)-vmess-argo-${USERNAME}
-  FILE_PATH="/usr/home/${USERNAME}/domains/${USERNAME}.serv00.net/public_html"
+  FILE_PATH="${HOME}/domains/${USERNAME}.serv00.net/public_html"
 
-  # 检查文件路径是否存在，如果不存在则创建
-  mkdir -p "${FILE_PATH}"
-  if [ ! -d "${FILE_PATH}" ]; then
-    echo "Error: Failed to create directory ${FILE_PATH}."
-    return 1
-  fi
-
-   # 验证目录权限
+  # 验证目录权限
   if [ ! -w "${HOME}/domains" ]; then
     echo -e "\e[31m错误：缺少目录权限\e[0m" >&2
     echo -e "请执行以下命令创建目录："
@@ -322,6 +315,12 @@ generate_links() {
     echo -e "  chmod 755 ${HOME}/domains && chmod 755 ${HOME}/domains/${USERNAME}.serv00.net"
     return 1
   fi
+
+  # 创建目标目录（使用 -p 防止层级缺失）
+  mkdir -p "$file_path" || {
+    echo -e "\e[31m无法创建目录: $file_path\e[0m" >&2
+    return 1
+  }
   
   cat > ${FILE_PATH}/${SUB_TOKEN}_vmess.log <<EOF
 vmess://$(echo "{ \"v\": \"2\", \"ps\": \"${NAME}\", \"add\": \"${CFIP}\", \"port\": \"${CFPORT}\", \"id\": \"${UUID}\", \"aid\": \"0\", \"scy\": \"auto\", \"net\": \"ws\", \"type\": \"none\", \"host\": \"${argodomain}\", \"path\": \"vmess-argo?ed=2048\", \"tls\": \"tls\", \"sni\": \"${argodomain}\", \"alpn\": \"\" }" | base64 -w0)
