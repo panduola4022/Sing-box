@@ -12,7 +12,7 @@ purple() { echo -e "\e[1;35m$1\033[0m"; }
 reading() { read -p "$(red "$1")" "$2"; }
 export LC_ALL=C
 USERNAME=$(whoami)
-USERNAME=$(whoami | tr '[:upper:]' '[:lower:]')
+# USERNAME=$(whoami | tr '[:upper:]' '[:lower:]')
 MD5_HASH=$(echo -n "$USERNAME" | md5sum | awk '{print $1}')
 export UUID=${UUID:-${MD5_HASH:0:8}-${MD5_HASH:8:4}-4${MD5_HASH:12:3}-$(echo $((RANDOM % 4 + 8)) | head -c 1)${MD5_HASH:15:3}-${MD5_HASH:19:12}}
 export NEZHA_SERVER=${NEZHA_SERVER:-''}     # 哪吒面板地址
